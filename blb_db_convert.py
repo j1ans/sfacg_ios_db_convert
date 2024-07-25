@@ -6,6 +6,8 @@ import ebooklib
 from ebooklib import epub
 import string
 import re
+from io import BytesIO
+from PIL import Image
 
 def debug_log_time():
     date = time.strftime('[%H:%M:%S] ',time.localtime(time.time()))
@@ -36,26 +38,36 @@ def get_book_detail_from_url(book_id):
     book_title = meta_list[0]
     book_author = meta_list[1]
     book_desc = (soup.find("p", attrs={"class": "introduce"})).get_text()
+    print(f'{debug_log_time()}start get bookid {book_id} cover image from url')  
+    novel_image = soup.find_all("a",attrs={"href": f"/Novel/{book_id}/"})
+    for row in novel_image:
+       novel_image = row.find("img",attrs={"class": f"block-img"})
+    novel_image = novel_image['src']
+    print(f'{debug_log_time()}successfully get bookid {book_id} image {novel_image} from url')
+    novel_image_url = novel_image
+    novel_image_reponse = requests.get(novel_image_url)
+    novel_image = novel_image_reponse.content
     print(f'{debug_log_time()}successfully get bookid {book_id}title:{book_title}author:{book_author} from url')
-    return book_title,book_author,book_desc
+    return book_title,book_author,book_desc,novel_image
 
-def process_volume(bookid,book_title,book_author,book_desc):
+def process_volume(bookid,book_title,book_author,book_desc,novel_image):
     print(f'{debug_log_time()}start process book[{bookid}]')
     volume_book_list = get_db_value('_id','Chapter',f'where bookId like {bookid}')  #获取书的卷ID
     for vol_id in volume_book_list: #遍历卷ID
         print(f'{debug_log_time()}start process volume[{vol_id}]')
         sno_volume = get_db_value('sno','Chapter',f'where _id like {vol_id}') #卷ID匹配有且仅有的一个值
         title_volume = get_db_value('title','Chapter',f'where _id like {vol_id}')
-        output_epub(bookid,book_title,book_author,book_desc,int(sno_volume[0]),title_volume[0],vol_id)
+        output_epub(bookid,book_title,book_author,book_desc,int(sno_volume[0]),title_volume[0],vol_id,novel_image)
         print(f'{debug_log_time()}finish output book[{bookid}]')   
 
-def output_epub(book_id,book_title,book_author,book_desc,sno_volume,title_volume,id_volume):
+def output_epub(book_id,book_title,book_author,book_desc,sno_volume,title_volume,id_volume,novel_image):
     print(f'{debug_log_time()}start output epub {book_title}[{book_id}] volume{sno_volume} - {title_volume}')
     book = epub.EpubBook() #创建epub对象
     book.set_identifier(f"{book_id}_{id_volume}")
     book.set_title(f"{book_title} - 第 {sno_volume} 卷 - {title_volume}")
     book.set_language("zh")
     book.add_author(f"{book_author}")
+    book.set_cover("image.jpg",novel_image)
     book.add_metadata('DC','description',f"{book_desc}")  
     first_loop = True
     cursor.execute(f"SELECT _id,title from Article where bookId like {book_id} AND chapterId like {id_volume}")#用Bookld和chapterId匹配每章的_id的标题
@@ -113,8 +125,8 @@ if __name__ == '__main__':
     cursor = con.cursor()
     list_db_books = get_db_value('bookId','Article','') #获取数据库有几本书
     for book in list_db_books:
-        book_title,book_author,book_desc = get_book_detail_from_url(book)
-        process_volume(book,book_title,book_author,book_desc)
+        book_title,book_author,book_desc,novel_image = get_book_detail_from_url(book)
+        process_volume(book,book_title,book_author,book_desc,novel_image)
                   
             
     con.commit()

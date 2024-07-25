@@ -2,3 +2,4 @@ pysqlite3
 requests
 BeautifulSoup4
 ebooklib
+pillow
